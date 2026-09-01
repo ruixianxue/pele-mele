@@ -1,4 +1,6 @@
 import { detectCropBox, type CropBox } from "./autoCrop";
+import { warpQuadToCanvas } from "./perspectiveWarp";
+import type { Quad } from "./quad";
 
 export interface UploadedPhoto {
   id: string;
@@ -6,7 +8,7 @@ export interface UploadedPhoto {
   naturalWidth: number;
   naturalHeight: number;
   /** Best-effort guess at the print's boundary, for pre-filling the crop
-   * tool. Undefined once a photo has actually been cropped (see cropPhoto)
+   * tool. Undefined once a photo has actually been cropped (see warpPhoto)
    * — there's nothing left to suggest at that point. */
   suggestedCrop?: CropBox;
 }
@@ -38,25 +40,24 @@ export function loadImageFile(file: File): Promise<UploadedPhoto> {
 }
 
 /**
- * Renders the given crop of a photo to a new image and returns it as a
- * fresh UploadedPhoto. Does not revoke the source photo's URL — the caller
- * decides when the original is no longer needed.
+ * Straightens the region of a photo inside `quad` into a new axis-aligned
+ * image and returns it as a fresh UploadedPhoto. A quad that happens to be
+ * an axis-aligned rectangle degrades to a plain crop; an arbitrary
+ * (keystoned) quad gets perspective-corrected — see perspectiveWarp.ts.
+ * Does not revoke the source photo's URL — the caller decides when the
+ * original is no longer needed.
  */
-export function cropPhoto(photo: UploadedPhoto, box: CropBox): Promise<UploadedPhoto> {
+export function warpPhoto(photo: UploadedPhoto, quad: Quad): Promise<UploadedPhoto> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const width = Math.max(1, Math.round(box.width));
-      const height = Math.max(1, Math.round(box.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        reject(new Error("Canvas 2D is not supported"));
+      let canvas: HTMLCanvasElement;
+      try {
+        canvas = warpQuadToCanvas(img, quad);
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error("Could not crop image"));
         return;
       }
-      ctx.drawImage(img, box.x, box.y, box.width, box.height, 0, 0, width, height);
       canvas.toBlob((blob) => {
         if (!blob) {
           reject(new Error("Could not crop image"));
@@ -65,8 +66,8 @@ export function cropPhoto(photo: UploadedPhoto, box: CropBox): Promise<UploadedP
         resolve({
           id: `photo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           url: URL.createObjectURL(blob),
-          naturalWidth: width,
-          naturalHeight: height,
+          naturalWidth: canvas.width,
+          naturalHeight: canvas.height,
         });
       }, "image/png");
     };

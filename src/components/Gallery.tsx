@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PhotoCard } from "./PhotoCard";
 import { CropReview } from "./CropReview";
 import { PileSimulation } from "../lib/physics";
-import type { CropBox } from "../lib/autoCrop";
-import { cropPhoto, isImageFile, loadImageFile, revokePhoto, type UploadedPhoto } from "../lib/uploadedPhoto";
+import type { Quad } from "../lib/quad";
+import { warpPhoto, isImageFile, loadImageFile, revokePhoto, type UploadedPhoto } from "../lib/uploadedPhoto";
 
 const TAP_THRESHOLD_PX = 6;
 const SWEEP_GAIN = 2.4;
@@ -78,11 +78,11 @@ export function Gallery() {
     // the layoutStack effect below re-places everyone automatically.
   }
 
-  async function handleCropConfirm(box: CropBox) {
+  async function handleCropConfirm(quad: Quad) {
     const original = reviewQueue[0];
     if (!original) return;
     try {
-      const cropped = await cropPhoto(original, box);
+      const cropped = await warpPhoto(original, quad);
       commitPhoto(cropped);
     } catch (err) {
       console.error(err);

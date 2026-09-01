@@ -1,37 +1,35 @@
 import { useRef, useState } from "react";
-import type { CropBox } from "../lib/autoCrop";
+import { quadFromBox, type Quad } from "../lib/quad";
 import type { UploadedPhoto } from "../lib/uploadedPhoto";
 
 const MAX_STAGE_WIDTH = 560;
 const MAX_STAGE_HEIGHT = 420;
-const MIN_BOX_SIZE = 24;
+const CORNER_KEYS = [0, 1, 2, 3] as const;
 
-type DragMode = "move" | "nw" | "ne" | "sw" | "se";
+type DragMode = "move" | 0 | 1 | 2 | 3;
 
 interface DragState {
   mode: DragMode;
   startClientX: number;
   startClientY: number;
-  startBox: CropBox;
+  startQuad: Quad;
 }
 
 interface CropReviewProps {
   photo: UploadedPhoto;
   index: number;
   total: number;
-  onConfirm: (box: CropBox) => void;
+  onConfirm: (quad: Quad) => void;
   onSkip: () => void;
   onDiscard: () => void;
 }
 
 export function CropReview({ photo, index, total, onConfirm, onSkip, onDiscard }: CropReviewProps) {
-  const initial = photo.suggestedCrop ?? {
-    x: 0,
-    y: 0,
-    width: photo.naturalWidth,
-    height: photo.naturalHeight,
-  };
-  const [box, setBox] = useState<CropBox>(initial);
+  const initial =
+    photo.suggestedCrop != null
+      ? quadFromBox(photo.suggestedCrop)
+      : quadFromBox({ x: 0, y: 0, width: photo.naturalWidth, height: photo.naturalHeight });
+  const [quad, setQuad] = useState<Quad>(initial);
   const dragRef = useRef<DragState | null>(null);
 
   const scale = Math.min(
@@ -43,25 +41,43 @@ export function CropReview({ photo, index, total, onConfirm, onSkip, onDiscard }
   const stageHeight = photo.naturalHeight * scale;
 
   function beginDrag(mode: DragMode) {
-    return (e: React.PointerEvent<HTMLElement>) => {
+    return (e: React.PointerEvent<Element>) => {
       e.stopPropagation();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      dragRef.current = { mode, startClientX: e.clientX, startClientY: e.clientY, startBox: box };
+      dragRef.current = { mode, startClientX: e.clientX, startClientY: e.clientY, startQuad: quad };
+      // Best-effort: keeps the drag tracked if the pointer slides off a
+      // small handle, but must not stop the drag state above from being
+      // set if the browser rejects capture (see the same fix in Gallery).
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // ignore — move/up still fire on this element without capture as
+        // long as the pointer stays roughly over it
+      }
     };
   }
 
-  function onDragMove(e: React.PointerEvent<HTMLElement>) {
+  function onDragMove(e: React.PointerEvent<Element>) {
     const drag = dragRef.current;
     if (!drag) return;
     const dx = (e.clientX - drag.startClientX) / scale;
     const dy = (e.clientY - drag.startClientY) / scale;
-    setBox(clampBox(applyDrag(drag.mode, drag.startBox, dx, dy), photo.naturalWidth, photo.naturalHeight));
+    setQuad(applyDrag(drag.mode, drag.startQuad, dx, dy, photo.naturalWidth, photo.naturalHeight));
   }
 
-  function endDrag(e: React.PointerEvent<HTMLElement>) {
-    if (dragRef.current) e.currentTarget.releasePointerCapture(e.pointerId);
+  function endDrag(e: React.PointerEvent<Element>) {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore — nothing to release if capture was never acquired
+    }
     dragRef.current = null;
   }
+
+  const displayQuad = quad.map((p) => ({ x: p.x * scale, y: p.y * scale }));
+  const polygonPoints = displayQuad.map((p) => `${p.x},${p.y}`).join(" ");
+  const dimPath = `M0,0 H${stageWidth} V${stageHeight} H0 Z M${polygonPoints
+    .split(" ")
+    .join(" L")} Z`;
 
   return (
     <div className="crop-overlay">
@@ -74,31 +90,40 @@ export function CropReview({ photo, index, total, onConfirm, onSkip, onDiscard }
             </span>
           )}
         </div>
+        <p className="crop-panel__hint">
+          Drag the corners to match the print's edges — handles keystone distortion, not just a
+          rectangle.
+        </p>
 
         <div className="crop-stage" style={{ width: stageWidth, height: stageHeight }}>
           <img className="crop-stage__img" src={photo.url} alt="" draggable={false} />
-          <div
-            className="crop-box"
-            style={{
-              left: box.x * scale,
-              top: box.y * scale,
-              width: box.width * scale,
-              height: box.height * scale,
-            }}
-            onPointerDown={beginDrag("move")}
-            onPointerMove={onDragMove}
-            onPointerUp={endDrag}
+          <svg
+            className="crop-svg"
+            width={stageWidth}
+            height={stageHeight}
+            viewBox={`0 0 ${stageWidth} ${stageHeight}`}
           >
-            {(["nw", "ne", "sw", "se"] as const).map((corner) => (
-              <span
-                key={corner}
-                className={`crop-handle crop-handle--${corner}`}
-                onPointerDown={beginDrag(corner)}
+            <path className="crop-dim" d={dimPath} fillRule="evenodd" />
+            <polygon
+              className="crop-outline"
+              points={polygonPoints}
+              onPointerDown={beginDrag("move")}
+              onPointerMove={onDragMove}
+              onPointerUp={endDrag}
+            />
+            {CORNER_KEYS.map((i) => (
+              <circle
+                key={i}
+                className="crop-handle"
+                cx={displayQuad[i].x}
+                cy={displayQuad[i].y}
+                r={7}
+                onPointerDown={beginDrag(i)}
                 onPointerMove={onDragMove}
                 onPointerUp={endDrag}
               />
             ))}
-          </div>
+          </svg>
         </div>
 
         <div className="crop-actions">
@@ -108,7 +133,7 @@ export function CropReview({ photo, index, total, onConfirm, onSkip, onDiscard }
           <button type="button" className="crop-btn crop-btn--ghost" onClick={onSkip}>
             Use full photo
           </button>
-          <button type="button" className="crop-btn crop-btn--primary" onClick={() => onConfirm(box)}>
+          <button type="button" className="crop-btn crop-btn--primary" onClick={() => onConfirm(quad)}>
             Crop
           </button>
         </div>
@@ -117,40 +142,44 @@ export function CropReview({ photo, index, total, onConfirm, onSkip, onDiscard }
   );
 }
 
-function applyDrag(mode: DragMode, start: CropBox, dx: number, dy: number): CropBox {
+function applyDrag(
+  mode: DragMode,
+  start: Quad,
+  dx: number,
+  dy: number,
+  naturalWidth: number,
+  naturalHeight: number,
+): Quad {
   if (mode === "move") {
-    return { ...start, x: start.x + dx, y: start.y + dy };
+    // Shift every corner together, but clamp by how far the *tightest*
+    // corner can move so the whole shape stays in bounds without warping.
+    const clampedDx = clampShift(
+      dx,
+      start.map((p) => p.x),
+      naturalWidth,
+    );
+    const clampedDy = clampShift(
+      dy,
+      start.map((p) => p.y),
+      naturalHeight,
+    );
+    return start.map((p) => ({ x: p.x + clampedDx, y: p.y + clampedDy })) as Quad;
   }
-  const x2 = start.x + start.width;
-  const y2 = start.y + start.height;
-  let nx = start.x;
-  let ny = start.y;
-  let nx2 = x2;
-  let ny2 = y2;
-  if (mode === "nw") {
-    nx = start.x + dx;
-    ny = start.y + dy;
-  } else if (mode === "ne") {
-    nx2 = x2 + dx;
-    ny = start.y + dy;
-  } else if (mode === "sw") {
-    nx = start.x + dx;
-    ny2 = y2 + dy;
-  } else if (mode === "se") {
-    nx2 = x2 + dx;
-    ny2 = y2 + dy;
-  }
-  return { x: Math.min(nx, nx2), y: Math.min(ny, ny2), width: Math.abs(nx2 - nx), height: Math.abs(ny2 - ny) };
+  const next = start.map((p) => ({ ...p })) as Quad;
+  const corner = next[mode];
+  corner.x = clampPoint(start[mode].x + dx, naturalWidth);
+  corner.y = clampPoint(start[mode].y + dy, naturalHeight);
+  return next;
 }
 
-function clampBox(box: CropBox, naturalWidth: number, naturalHeight: number): CropBox {
-  let width = Math.max(MIN_BOX_SIZE, Math.min(box.width, naturalWidth));
-  let height = Math.max(MIN_BOX_SIZE, Math.min(box.height, naturalHeight));
-  let x = Math.max(0, Math.min(box.x, naturalWidth - width));
-  let y = Math.max(0, Math.min(box.y, naturalHeight - height));
-  // Re-clamp size in case the position clamp above pushed it out of range
-  // on a very small source image.
-  width = Math.min(width, naturalWidth - x);
-  height = Math.min(height, naturalHeight - y);
-  return { x, y, width, height };
+function clampPoint(v: number, max: number): number {
+  return Math.min(Math.max(v, 0), max);
+}
+
+function clampShift(delta: number, values: number[], max: number): number {
+  const min = Math.min(...values);
+  const maxV = Math.max(...values);
+  const lo = -min;
+  const hi = max - maxV;
+  return Math.min(Math.max(delta, lo), hi);
 }

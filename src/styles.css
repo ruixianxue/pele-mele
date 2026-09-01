@@ -269,6 +269,13 @@ body {
   color: var(--ink-soft);
 }
 
+.crop-panel__hint {
+  margin: -8px 0 0;
+  max-width: 480px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
 .crop-stage {
   position: relative;
   overflow: hidden;
@@ -288,52 +295,35 @@ body {
   user-select: none;
 }
 
-.crop-box {
+.crop-svg {
   position: absolute;
-  border: 1.5px solid #fff;
-  cursor: move;
+  inset: 0;
   touch-action: none;
-  /* dims everything outside the box without extra mask elements */
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+}
+
+.crop-dim {
+  fill: rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.crop-outline {
+  fill: transparent;
+  stroke: #fff;
+  stroke-width: 1.5;
+  cursor: move;
+  pointer-events: all;
 }
 
 .crop-handle {
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  margin: -7px;
-  background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.3);
-  border-radius: 50%;
-  touch-action: none;
+  fill: #fff;
+  stroke: rgba(0, 0, 0, 0.35);
+  stroke-width: 1;
+  cursor: grab;
+  pointer-events: all;
 }
 
-.crop-handle--nw {
-  top: 0;
-  left: 0;
-  cursor: nwse-resize;
-}
-
-.crop-handle--ne {
-  top: 0;
-  right: 0;
-  margin-right: -7px;
-  cursor: nesw-resize;
-}
-
-.crop-handle--sw {
-  bottom: 0;
-  left: 0;
-  margin-bottom: -7px;
-  cursor: nesw-resize;
-}
-
-.crop-handle--se {
-  bottom: 0;
-  right: 0;
-  margin-right: -7px;
-  margin-bottom: -7px;
-  cursor: nwse-resize;
+.crop-handle:active {
+  cursor: grabbing;
 }
 
 .crop-actions {
