@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PhotoCard } from "./PhotoCard";
+import { CropReview } from "./CropReview";
 import { PileSimulation } from "../lib/physics";
-import { isImageFile, loadImageFile, revokePhoto, type UploadedPhoto } from "../lib/uploadedPhoto";
+import type { CropBox } from "../lib/autoCrop";
+import { cropPhoto, isImageFile, loadImageFile, revokePhoto, type UploadedPhoto } from "../lib/uploadedPhoto";
 
 const TAP_THRESHOLD_PX = 6;
 const SWEEP_GAIN = 2.4;
@@ -28,6 +30,7 @@ export function Gallery() {
   const [bounds, setBounds] = useState<{ width: number; height: number } | null>(null);
   const [pendingEntranceIds, setPendingEntranceIds] = useState<string[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [reviewQueue, setReviewQueue] = useState<UploadedPhoto[]>([]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -35,11 +38,14 @@ export function Gallery() {
   const trackRef = useRef<PointerTrack | null>(null);
   const photosRef = useRef<UploadedPhoto[]>([]);
   photosRef.current = photos;
+  const reviewQueueRef = useRef<UploadedPhoto[]>([]);
+  reviewQueueRef.current = reviewQueue;
 
   useEffect(() => {
     return () => {
       sim.dispose();
       photosRef.current.forEach(revokePhoto);
+      reviewQueueRef.current.forEach(revokePhoto);
     };
   }, [sim]);
 
@@ -55,16 +61,50 @@ export function Gallery() {
       return;
     }
 
-    setPhotos((prev) => [...prev, ...loaded]);
+    // Every upload goes through the crop-review queue first — see
+    // commitPhoto for where a reviewed photo actually joins the pile.
+    setReviewQueue((prev) => [...prev, ...loaded]);
+  }
 
+  function commitPhoto(photo: UploadedPhoto) {
+    setPhotos((prev) => [...prev, photo]);
     if (phase === "empty") {
-      setTopId(loaded[Math.floor(Math.random() * loaded.length)].id);
+      setTopId(photo.id);
       setPhase("stacked");
     } else if (phase === "scattered") {
-      setPendingEntranceIds((prev) => [...prev, ...loaded.map((p) => p.id)]);
+      setPendingEntranceIds((prev) => [...prev, photo.id]);
     }
-    // phase === "stacked": new photos just join the still-unexploded pile;
+    // phase === "stacked": the photo just joins the still-unexploded pile;
     // the layoutStack effect below re-places everyone automatically.
+  }
+
+  async function handleCropConfirm(box: CropBox) {
+    const original = reviewQueue[0];
+    if (!original) return;
+    try {
+      const cropped = await cropPhoto(original, box);
+      commitPhoto(cropped);
+    } catch (err) {
+      console.error(err);
+      commitPhoto(original);
+    } finally {
+      revokePhoto(original);
+      setReviewQueue((prev) => prev.slice(1));
+    }
+  }
+
+  function handleCropSkip() {
+    const original = reviewQueue[0];
+    if (!original) return;
+    commitPhoto(original);
+    setReviewQueue((prev) => prev.slice(1));
+  }
+
+  function handleCropDiscard() {
+    const original = reviewQueue[0];
+    if (!original) return;
+    revokePhoto(original);
+    setReviewQueue((prev) => prev.slice(1));
   }
 
   function openFilePicker() {
@@ -214,12 +254,12 @@ export function Gallery() {
         <div className="app-header__controls">
           {phase !== "empty" && (
             <button type="button" className="upload-btn" onClick={openFilePicker}>
-              + 添加照片
+              + Add photos
             </button>
           )}
           {phase === "scattered" && (
             <button type="button" className="shuffle-btn" onClick={reshuffle}>
-              再乱一次
+              Shuffle again
             </button>
           )}
         </div>
@@ -237,13 +277,18 @@ export function Gallery() {
         onDrop={handleDrop}
       >
         {phase === "stacked" && (
-          <p className="gallery-hint">点击桌面，看看会发生什么</p>
+          <p className="gallery-hint">Tap the table to see what happens</p>
         )}
 
         {phase === "empty" && (
-          <button type="button" className="dropzone" onClick={openFilePicker}>
-            <span className="dropzone__title">拖拽拍立得照片到这里</span>
-            <span className="dropzone__sub">或点击上传</span>
+          <button
+            type="button"
+            className="dropzone"
+            onClick={openFilePicker}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <span className="dropzone__title">Drag your instant photos here</span>
+            <span className="dropzone__sub">or click to upload</span>
           </button>
         )}
 
@@ -258,6 +303,18 @@ export function Gallery() {
           />
         ))}
       </div>
+
+      {reviewQueue.length > 0 && (
+        <CropReview
+          key={reviewQueue[0].id}
+          photo={reviewQueue[0]}
+          index={1}
+          total={reviewQueue.length}
+          onConfirm={handleCropConfirm}
+          onSkip={handleCropSkip}
+          onDiscard={handleCropDiscard}
+        />
+      )}
     </div>
   );
 }
