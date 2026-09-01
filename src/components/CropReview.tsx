@@ -1,9 +1,15 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { quadFromBox, type Quad } from "../lib/quad";
 import type { UploadedPhoto } from "../lib/uploadedPhoto";
 
-const MAX_STAGE_WIDTH = 560;
-const MAX_STAGE_HEIGHT = 420;
+// Real uploads run 2000-4000px+ on a side, so a small preview compresses
+// many real pixels into each preview pixel — a misalignment too small to
+// see or drag-correct here can still show up as a visible sliver of
+// background once the crop is applied at full resolution. Sized generously
+// (the .crop-stage CSS max-width/max-height still cap it on small viewports).
+const MAX_STAGE_WIDTH = 1100;
+const MAX_STAGE_HEIGHT = 760;
+const HANDLE_RADIUS_PX = 7;
 const CORNER_KEYS = [0, 1, 2, 3] as const;
 
 type DragMode = "move" | 0 | 1 | 2 | 3;
@@ -33,6 +39,44 @@ export function CropReview({ photo, index, total, error, onConfirm, onSkip, onDi
   const [quad, setQuad] = useState<Quad>(initial);
   const [submitting, setSubmitting] = useState(false);
   const dragRef = useRef<DragState | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+
+  // The size we'd *like* the stage to render at, before any CSS
+  // max-width/max-height clamping. Used only for the very first paint.
+  const intendedScale = Math.min(
+    MAX_STAGE_WIDTH / photo.naturalWidth,
+    MAX_STAGE_HEIGHT / photo.naturalHeight,
+    1,
+  );
+  const intendedWidth = photo.naturalWidth * intendedScale;
+  const intendedHeight = photo.naturalHeight * intendedScale;
+
+  // The container's *actual* rendered size, measured after layout. CSS
+  // max-width/max-height clamp width and height independently, which can
+  // shrink one dimension more than the other on a short or narrow
+  // viewport — if drag math assumed a single uniform scale instead of the
+  // real per-axis one, the coordinates the user aligns onscreen would
+  // silently disagree with what actually gets warped, showing up as
+  // background bleeding in at whichever edge the mismatch is worst.
+  // Tracking width and height separately (rather than one "scale") keeps
+  // the SVG overlay, the <img>, and this drag math all agreeing even when
+  // the container ends up non-uniformly squished.
+  const [actualStageSize, setActualStageSize] = useState<{ width: number; height: number } | null>(
+    null,
+  );
+  const scaleX = (actualStageSize?.width ?? intendedWidth) / photo.naturalWidth;
+  const scaleY = (actualStageSize?.height ?? intendedHeight) / photo.naturalHeight;
+
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      setActualStageSize({ width, height });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   async function handleConfirmClick() {
     setSubmitting(true);
@@ -43,14 +87,6 @@ export function CropReview({ photo, index, total, error, onConfirm, onSkip, onDi
     // component, so no mounted-ref guard is needed here.
     setSubmitting(false);
   }
-
-  const scale = Math.min(
-    MAX_STAGE_WIDTH / photo.naturalWidth,
-    MAX_STAGE_HEIGHT / photo.naturalHeight,
-    1,
-  );
-  const stageWidth = photo.naturalWidth * scale;
-  const stageHeight = photo.naturalHeight * scale;
 
   function beginDrag(mode: DragMode) {
     return (e: React.PointerEvent<Element>) => {
@@ -71,8 +107,8 @@ export function CropReview({ photo, index, total, error, onConfirm, onSkip, onDi
   function onDragMove(e: React.PointerEvent<Element>) {
     const drag = dragRef.current;
     if (!drag) return;
-    const dx = (e.clientX - drag.startClientX) / scale;
-    const dy = (e.clientY - drag.startClientY) / scale;
+    const dx = (e.clientX - drag.startClientX) / scaleX;
+    const dy = (e.clientY - drag.startClientY) / scaleY;
     setQuad(applyDrag(drag.mode, drag.startQuad, dx, dy, photo.naturalWidth, photo.naturalHeight));
   }
 
@@ -85,11 +121,20 @@ export function CropReview({ photo, index, total, error, onConfirm, onSkip, onDi
     dragRef.current = null;
   }
 
-  const displayQuad = quad.map((p) => ({ x: p.x * scale, y: p.y * scale }));
-  const polygonPoints = displayQuad.map((p) => `${p.x},${p.y}`).join(" ");
-  const dimPath = `M0,0 H${stageWidth} V${stageHeight} H0 Z M${polygonPoints
+  // The SVG's viewBox is the photo's own natural pixel space, so every
+  // shape below is plotted in the *same* coordinates warpPhoto will
+  // actually use — no separate "display scale" to keep in sync with the
+  // image, and the browser's own viewBox scaling keeps it aligned with
+  // the <img> beneath no matter what size the container actually renders
+  // at (including CSS-clamped sizes that don't match the intended one).
+  const polygonPoints = quad.map((p) => `${p.x},${p.y}`).join(" ");
+  const dimPath = `M0,0 H${photo.naturalWidth} V${photo.naturalHeight} H0 Z M${polygonPoints
     .split(" ")
     .join(" L")} Z`;
+  // Only cosmetic (the handle renders as a slight ellipse instead of a
+  // perfect circle in the rare non-uniformly-squished case) — hit target
+  // size, not drag correctness, so a single representative scale is fine.
+  const handleRadius = HANDLE_RADIUS_PX / scaleX;
 
   return (
     <div className="crop-overlay">
@@ -107,18 +152,22 @@ export function CropReview({ photo, index, total, error, onConfirm, onSkip, onDi
           rectangle.
         </p>
 
-        <div className="crop-stage" style={{ width: stageWidth, height: stageHeight }}>
+        <div
+          ref={stageRef}
+          className="crop-stage"
+          style={{ width: intendedWidth, height: intendedHeight }}
+        >
           <img className="crop-stage__img" src={photo.url} alt="" draggable={false} />
           <svg
             className="crop-svg"
-            width={stageWidth}
-            height={stageHeight}
-            viewBox={`0 0 ${stageWidth} ${stageHeight}`}
+            viewBox={`0 0 ${photo.naturalWidth} ${photo.naturalHeight}`}
+            preserveAspectRatio="none"
           >
             <path className="crop-dim" d={dimPath} fillRule="evenodd" />
             <polygon
               className="crop-outline"
               points={polygonPoints}
+              vectorEffect="non-scaling-stroke"
               onPointerDown={beginDrag("move")}
               onPointerMove={onDragMove}
               onPointerUp={endDrag}
@@ -127,9 +176,10 @@ export function CropReview({ photo, index, total, error, onConfirm, onSkip, onDi
               <circle
                 key={i}
                 className="crop-handle"
-                cx={displayQuad[i].x}
-                cy={displayQuad[i].y}
-                r={7}
+                cx={quad[i].x}
+                cy={quad[i].y}
+                r={handleRadius}
+                vectorEffect="non-scaling-stroke"
                 onPointerDown={beginDrag(i)}
                 onPointerMove={onDragMove}
                 onPointerUp={endDrag}
