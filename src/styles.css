@@ -276,6 +276,13 @@ body {
   color: var(--ink-soft);
 }
 
+.crop-panel__error {
+  margin: 0;
+  max-width: 480px;
+  font-size: 12px;
+  color: #a33c2e;
+}
+
 .crop-stage {
   position: relative;
   overflow: hidden;
@@ -360,4 +367,10 @@ body {
 
 .crop-btn--primary:hover {
   transform: translateY(-1px);
+}
+
+.crop-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
 }

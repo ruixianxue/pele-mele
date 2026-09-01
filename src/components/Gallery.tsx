@@ -31,6 +31,7 @@ export function Gallery() {
   const [pendingEntranceIds, setPendingEntranceIds] = useState<string[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [reviewQueue, setReviewQueue] = useState<UploadedPhoto[]>([]);
+  const [cropError, setCropError] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -81,21 +82,27 @@ export function Gallery() {
   async function handleCropConfirm(quad: Quad) {
     const original = reviewQueue[0];
     if (!original) return;
+    setCropError(null);
     try {
       const cropped = await warpPhoto(original, quad);
       commitPhoto(cropped);
-    } catch (err) {
-      console.error(err);
-      commitPhoto(original);
-    } finally {
       revokePhoto(original);
       setReviewQueue((prev) => prev.slice(1));
+    } catch (err) {
+      // Deliberately does NOT fall back to committing the uncropped
+      // original here: a silent fallback would look exactly like "the app
+      // ignored my crop" — the failure must be visible, with the photo
+      // still in review so the user can retry or explicitly choose "use
+      // full photo" instead.
+      console.error("Crop failed:", err);
+      setCropError(err instanceof Error ? err.message : "Could not crop this photo.");
     }
   }
 
   function handleCropSkip() {
     const original = reviewQueue[0];
     if (!original) return;
+    setCropError(null);
     commitPhoto(original);
     setReviewQueue((prev) => prev.slice(1));
   }
@@ -103,6 +110,7 @@ export function Gallery() {
   function handleCropDiscard() {
     const original = reviewQueue[0];
     if (!original) return;
+    setCropError(null);
     revokePhoto(original);
     setReviewQueue((prev) => prev.slice(1));
   }
@@ -310,6 +318,7 @@ export function Gallery() {
           photo={reviewQueue[0]}
           index={1}
           total={reviewQueue.length}
+          error={cropError}
           onConfirm={handleCropConfirm}
           onSkip={handleCropSkip}
           onDiscard={handleCropDiscard}

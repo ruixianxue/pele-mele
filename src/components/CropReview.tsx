@@ -19,18 +19,30 @@ interface CropReviewProps {
   photo: UploadedPhoto;
   index: number;
   total: number;
-  onConfirm: (quad: Quad) => void;
+  error?: string | null;
+  onConfirm: (quad: Quad) => Promise<void>;
   onSkip: () => void;
   onDiscard: () => void;
 }
 
-export function CropReview({ photo, index, total, onConfirm, onSkip, onDiscard }: CropReviewProps) {
+export function CropReview({ photo, index, total, error, onConfirm, onSkip, onDiscard }: CropReviewProps) {
   const initial =
     photo.suggestedCrop != null
       ? quadFromBox(photo.suggestedCrop)
       : quadFromBox({ x: 0, y: 0, width: photo.naturalWidth, height: photo.naturalHeight });
   const [quad, setQuad] = useState<Quad>(initial);
+  const [submitting, setSubmitting] = useState(false);
   const dragRef = useRef<DragState | null>(null);
+
+  async function handleConfirmClick() {
+    setSubmitting(true);
+    await onConfirm(quad);
+    // On success this instance unmounts (the review queue shifts) and this
+    // is a no-op; a failure leaves it mounted needing the button
+    // re-enabled. React 18 doesn't warn on updating an unmounted
+    // component, so no mounted-ref guard is needed here.
+    setSubmitting(false);
+  }
 
   const scale = Math.min(
     MAX_STAGE_WIDTH / photo.naturalWidth,
@@ -126,15 +138,36 @@ export function CropReview({ photo, index, total, onConfirm, onSkip, onDiscard }
           </svg>
         </div>
 
+        {error && (
+          <p className="crop-panel__error">
+            Couldn't crop this photo: {error}. You can try again, or use the full photo instead.
+          </p>
+        )}
+
         <div className="crop-actions">
-          <button type="button" className="crop-btn crop-btn--ghost" onClick={onDiscard}>
+          <button
+            type="button"
+            className="crop-btn crop-btn--ghost"
+            onClick={onDiscard}
+            disabled={submitting}
+          >
             Remove
           </button>
-          <button type="button" className="crop-btn crop-btn--ghost" onClick={onSkip}>
+          <button
+            type="button"
+            className="crop-btn crop-btn--ghost"
+            onClick={onSkip}
+            disabled={submitting}
+          >
             Use full photo
           </button>
-          <button type="button" className="crop-btn crop-btn--primary" onClick={() => onConfirm(quad)}>
-            Crop
+          <button
+            type="button"
+            className="crop-btn crop-btn--primary"
+            onClick={handleConfirmClick}
+            disabled={submitting}
+          >
+            {submitting ? "Cropping…" : "Crop"}
           </button>
         </div>
       </div>
