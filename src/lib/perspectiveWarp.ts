@@ -7,10 +7,10 @@ import { mapUnitSquareToQuad, outputSizeForQuad, type Quad } from "./quad";
  * pixel-by-pixel via the inverse projective mapping instead of a single
  * drawImage call.
  */
-export function warpQuadToCanvas(img: HTMLImageElement, quad: Quad): HTMLCanvasElement {
+export function warpQuadToCanvas(img: ImageBitmap, quad: Quad): HTMLCanvasElement {
   const srcCanvas = document.createElement("canvas");
-  srcCanvas.width = img.naturalWidth;
-  srcCanvas.height = img.naturalHeight;
+  srcCanvas.width = img.width;
+  srcCanvas.height = img.height;
   const srcCtx = srcCanvas.getContext("2d", { willReadFrequently: true });
   if (!srcCtx) throw new Error("Canvas 2D is not supported");
   srcCtx.drawImage(img, 0, 0);

@@ -25,9 +25,9 @@ const MIN_SPAN_FRACTION = 0.3;
  * peak). Falls back to the full frame when nothing looks confident, so a
  * bad guess never applies a bad crop — the user still adjusts by hand.
  */
-export function detectCropBox(img: HTMLImageElement): CropBox {
-  const nw = img.naturalWidth;
-  const nh = img.naturalHeight;
+export function detectCropBox(img: ImageBitmap): CropBox {
+  const nw = img.width;
+  const nh = img.height;
   const full: CropBox = { x: 0, y: 0, width: nw, height: nh };
   if (!nw || !nh) return full;
 
