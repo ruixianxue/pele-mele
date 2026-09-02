@@ -105,33 +105,55 @@ body {
   user-select: none;
   transition: box-shadow 0.2s ease;
 
-  /* A white cotton sheet under soft window light: warm-white base, a
-     directional glow from the upper-left, a handful of very low-contrast
-     "wrinkle" shadows breaking up the flatness, and fine grain on top so
-     it never reads as a plain UI panel. */
+  /* A real photographed cotton weave (public-domain-licensed texture,
+     see public/textures/linen.jpg) instead of a synthesized one — see
+     everytexture.com — warmed from its natural cool grey cast toward the
+     site's cream palette via background-blend-mode, since a CSS filter
+     on this element would also blur/tint its children (the photo
+     cards). The gathered-fold shadows sit on ::before, on top of this. */
   background-color: var(--sheet-base);
   background-image:
-    radial-gradient(ellipse 34% 22% at 22% 30%, rgba(120, 108, 88, 0.07), transparent 70%),
-    radial-gradient(ellipse 46% 16% at 68% 20%, rgba(120, 108, 88, 0.05), transparent 72%),
-    radial-gradient(ellipse 26% 30% at 78% 68%, rgba(120, 108, 88, 0.06), transparent 70%),
-    radial-gradient(ellipse 50% 20% at 35% 82%, rgba(120, 108, 88, 0.06), transparent 72%),
-    radial-gradient(ellipse 20% 26% at 8% 78%, rgba(120, 108, 88, 0.05), transparent 70%),
-    radial-gradient(ellipse 70% 55% at 18% 8%, rgba(255, 253, 248, 0.9), transparent 60%),
-    linear-gradient(135deg, #f8f6f0 0%, var(--sheet-base) 45%, #ece7dc 100%);
+    linear-gradient(rgba(214, 178, 122, 0.4), rgba(214, 178, 122, 0.4)),
+    url("/textures/linen.jpg");
+  background-blend-mode: soft-light, normal;
+  background-size: cover;
+  background-position: center;
   box-shadow:
-    inset 0 0 90px rgba(110, 100, 80, 0.1),
+    inset 0 0 100px rgba(100, 88, 68, 0.13),
     inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .gallery-canvas::before {
-  /* fine cotton-weave grain */
+  /* Gathered-fold shadows: clusters of small, mostly-round, overlapping
+     soft blobs (not wide bands, which read as stripes) mimicking how a
+     dropped sheet bunches up in a handful of spots while lying mostly
+     flat elsewhere. Each cluster mixes shadow and highlight blobs of
+     different sizes so no single edge is visible. Plus the directional
+     window-light glow. Sits above the real fabric photo on the parent. */
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.4;
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.85 0 0 0 0 0.82 0 0 0 0 0.74 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-image:
+    /* gather zone 1 — upper-left */
+    radial-gradient(circle at 19% 29%, rgba(96, 84, 64, 0.15) 0%, transparent 60%),
+    radial-gradient(ellipse 11% 7% at 24% 33%, rgba(96, 84, 64, 0.13) 0%, transparent 75%),
+    radial-gradient(ellipse 8% 5% at 15% 35%, rgba(255, 252, 245, 0.5) 0%, transparent 75%),
+    radial-gradient(ellipse 6% 9% at 27% 25%, rgba(96, 84, 64, 0.1) 0%, transparent 75%),
+    /* gather zone 2 — lower-right */
+    radial-gradient(circle at 71% 67%, rgba(96, 84, 64, 0.14) 0%, transparent 62%),
+    radial-gradient(ellipse 10% 6% at 66% 71%, rgba(96, 84, 64, 0.12) 0%, transparent 75%),
+    radial-gradient(ellipse 7% 5% at 76% 64%, rgba(255, 252, 245, 0.45) 0%, transparent 75%),
+    radial-gradient(ellipse 8% 6% at 68% 60%, rgba(96, 84, 64, 0.09) 0%, transparent 75%),
+    /* gather zone 3 — lower-left corner */
+    radial-gradient(circle at 8% 84%, rgba(96, 84, 64, 0.13) 0%, transparent 55%),
+    radial-gradient(ellipse 7% 5% at 11% 80%, rgba(255, 252, 245, 0.4) 0%, transparent 75%),
+    /* a couple of faint stray blobs elsewhere so it doesn't read as
+       exactly three symmetric clusters */
+    radial-gradient(ellipse 14% 9% at 58% 14%, rgba(96, 84, 64, 0.06) 0%, transparent 78%),
+    radial-gradient(ellipse 10% 14% at 90% 32%, rgba(96, 84, 64, 0.06) 0%, transparent 78%),
+    /* directional window light */
+    radial-gradient(ellipse 70% 55% at 18% 8%, rgba(255, 253, 248, 0.55), transparent 60%);
 }
 
 .gallery-canvas.is-drag-over {
