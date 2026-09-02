@@ -10,7 +10,7 @@ const SWEEP_GAIN = 2.4;
 const MAX_SWEEP_IMPULSE = 42;
 const MIN_DT_MS = 4;
 
-type Phase = "empty" | "stacked" | "scattered";
+type Phase = "cover" | "empty" | "stacked" | "scattered";
 
 interface PointerTrack {
   pointerId: number;
@@ -25,7 +25,8 @@ interface PointerTrack {
 export function Gallery() {
   const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
   const [topId, setTopId] = useState<string | null>(null);
-  const [phase, setPhase] = useState<Phase>("empty");
+  const [phase, setPhase] = useState<Phase>("cover");
+  const [coverClosing, setCoverClosing] = useState(false);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [bounds, setBounds] = useState<{ width: number; height: number } | null>(null);
   const [pendingEntranceIds, setPendingEntranceIds] = useState<string[]>([]);
@@ -117,6 +118,15 @@ export function Gallery() {
 
   function openFilePicker() {
     fileInputRef.current?.click();
+  }
+
+  function enterFromCover() {
+    setCoverClosing(true);
+  }
+
+  function handleCoverTransitionEnd(e: React.TransitionEvent<HTMLDivElement>) {
+    if (e.propertyName !== "opacity") return;
+    setPhase("empty");
   }
 
   useEffect(() => {
@@ -257,21 +267,23 @@ export function Gallery() {
         }}
       />
 
-      <header className="app-header">
-        <span className="app-header__mark">pêle · mêle</span>
-        <div className="app-header__controls">
-          {phase !== "empty" && (
-            <button type="button" className="upload-btn" onClick={openFilePicker}>
-              + Add photos
-            </button>
-          )}
-          {phase === "scattered" && (
-            <button type="button" className="shuffle-btn" onClick={reshuffle}>
-              Shuffle again
-            </button>
-          )}
-        </div>
-      </header>
+      {phase !== "cover" && (
+        <header className="app-header">
+          <span className="app-header__mark">pêle · mêle</span>
+          <div className="app-header__controls">
+            {(phase === "stacked" || phase === "scattered") && (
+              <button type="button" className="upload-btn" onClick={openFilePicker}>
+                + Add photos
+              </button>
+            )}
+            {phase === "scattered" && (
+              <button type="button" className="shuffle-btn" onClick={reshuffle}>
+                Shuffle again
+              </button>
+            )}
+          </div>
+        </header>
+      )}
 
       <div
         ref={containerRef}
@@ -284,6 +296,19 @@ export function Gallery() {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
+        {phase === "cover" && (
+          <div
+            className={`cover-screen${coverClosing ? " is-closing" : ""}`}
+            onClick={enterFromCover}
+            onPointerDown={(e) => e.stopPropagation()}
+            onTransitionEnd={handleCoverTransitionEnd}
+          >
+            <span className="cover-screen__mark">pêle · mêle</span>
+            <span className="cover-screen__tagline">for the prints still waiting in a drawer</span>
+            <span className="cover-screen__hint">tap to begin</span>
+          </div>
+        )}
+
         {phase === "stacked" && (
           <p className="gallery-hint">Tap the table to see what happens</p>
         )}
