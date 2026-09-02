@@ -41,11 +41,34 @@ export function CropReview({ photo, index, total, error, onConfirm, onSkip, onDi
   const dragRef = useRef<DragState | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
 
-  // The size we'd *like* the stage to render at, before any CSS
-  // max-width/max-height clamping. Used only for the very first paint.
+  // Mirrors the .crop-stage CSS max-width/max-height (calc(100vw - 72px)
+  // and 72vh) so the *intended* size below never exceeds what CSS would
+  // actually allow. Without this, e.g. a wide photo on a narrow window
+  // gets its width clamped by CSS but not its height (or vice versa on a
+  // short window), breaking the box's aspect ratio — and since the <img>
+  // fills that box exactly, the photo itself renders visibly stretched or
+  // squashed, not just misaligned. Computing from real viewport size keeps
+  // the box's aspect ratio correct in the first place; the ResizeObserver
+  // below is the remaining safety net for edge cases (scrollbars, etc.)
+  // rather than the primary defense.
+  const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
+  useEffect(() => {
+    function onResize() {
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const availableWidth = Math.max(200, viewport.width - 72);
+  const availableHeight = Math.max(200, viewport.height * 0.72);
+
+  // The size we'd *like* the stage to render at — capped by both the
+  // fixed maximums and the real available viewport space above.
   const intendedScale = Math.min(
     MAX_STAGE_WIDTH / photo.naturalWidth,
     MAX_STAGE_HEIGHT / photo.naturalHeight,
+    availableWidth / photo.naturalWidth,
+    availableHeight / photo.naturalHeight,
     1,
   );
   const intendedWidth = photo.naturalWidth * intendedScale;
