@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toPng } from "html-to-image";
 import { PhotoCard } from "./PhotoCard";
 import { CropReview } from "./CropReview";
 import { PileSimulation } from "../lib/physics";
@@ -9,6 +10,7 @@ const TAP_THRESHOLD_PX = 6;
 const SWEEP_GAIN = 2.4;
 const MAX_SWEEP_IMPULSE = 42;
 const MIN_DT_MS = 4;
+const DEFAULT_BG_COLOR = "#f4f1ea";
 
 type Phase = "cover" | "empty" | "stacked" | "scattered";
 
@@ -33,9 +35,12 @@ export function Gallery() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [reviewQueue, setReviewQueue] = useState<UploadedPhoto[]>([]);
   const [cropError, setCropError] = useState<string | null>(null);
+  const [bgColor, setBgColor] = useState(DEFAULT_BG_COLOR);
+  const [isSavingImage, setIsSavingImage] = useState(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const colorInputRef = useRef<HTMLInputElement | null>(null);
   const sim = useMemo(() => new PileSimulation(), []);
   const trackRef = useRef<PointerTrack | null>(null);
   const photosRef = useRef<UploadedPhoto[]>([]);
@@ -70,7 +75,11 @@ export function Gallery() {
 
   function commitPhoto(photo: UploadedPhoto) {
     setPhotos((prev) => [...prev, photo]);
-    if (phase === "empty") {
+    // The file input and canvas drop target both stay live even during
+    // the "cover" phase, so a drag-drop before the user has tapped
+    // through the cover must still land in a sane state — same as if
+    // they'd already entered.
+    if (phase === "empty" || phase === "cover") {
       setTopId(photo.id);
       setPhase("stacked");
     } else if (phase === "scattered") {
@@ -118,6 +127,63 @@ export function Gallery() {
 
   function openFilePicker() {
     fileInputRef.current?.click();
+  }
+
+  function openColorPicker() {
+    colorInputRef.current?.click();
+  }
+
+  async function handleSaveImage() {
+    const el = containerRef.current;
+    if (!el || isSavingImage) return;
+    setIsSavingImage(true);
+    try {
+      // Snapshot just the desk (photos + background), not the floating
+      // header controls — a clean shot to actually share, not an app
+      // screenshot. Rendered above native resolution so it still looks
+      // sharp posted at full size.
+      //
+      // skipFonts avoids html-to-image trying to read cssRules off the
+      // cross-origin Google Fonts stylesheet to embed it — that throws a
+      // SecurityError (no CORS headers on that stylesheet) and fails the
+      // whole capture. The fonts are already loaded in this document, so
+      // the render is unaffected either way.
+      //
+      // No cacheBust: it appends a "?timestamp" query string to defeat
+      // caching, which corrupts our photo <img> sources — they're blob:
+      // URLs, which don't support query strings at all, so the appended
+      // one turns a valid URL into a 404.
+      const dataUrl = await toPng(el, {
+        pixelRatio: Math.min(window.devicePixelRatio || 1, 3),
+        skipFonts: true,
+      });
+
+      const canShareFiles =
+        typeof navigator.canShare === "function" &&
+        typeof File !== "undefined" &&
+        navigator.canShare({ files: [new File([], "x.png", { type: "image/png" })] });
+
+      if (canShareFiles) {
+        const blob = await (await fetch(dataUrl)).blob();
+        const file = new File([blob], "pele-mele.png", { type: "image/png" });
+        try {
+          await navigator.share({ files: [file] });
+          return;
+        } catch (shareErr) {
+          // Cancelled or unsupported mid-flow — fall through to download.
+          if (shareErr instanceof Error && shareErr.name === "AbortError") return;
+        }
+      }
+
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = "pele-mele.png";
+      link.click();
+    } catch (err) {
+      console.error("Could not save image:", err);
+    } finally {
+      setIsSavingImage(false);
+    }
   }
 
   function enterFromCover() {
@@ -266,11 +332,26 @@ export function Gallery() {
           e.target.value = "";
         }}
       />
+      <input
+        ref={colorInputRef}
+        type="color"
+        value={bgColor}
+        onChange={(e) => setBgColor(e.target.value)}
+        className="visually-hidden"
+        aria-label="Background color"
+      />
 
       {phase !== "cover" && (
         <header className="app-header">
           <span className="app-header__mark">pêle · mêle</span>
           <div className="app-header__controls">
+            <button
+              type="button"
+              className="color-swatch"
+              style={{ backgroundColor: bgColor }}
+              onClick={openColorPicker}
+              aria-label="Choose background color"
+            />
             {(phase === "stacked" || phase === "scattered") && (
               <button type="button" className="upload-btn" onClick={openFilePicker}>
                 + Add photos
@@ -281,6 +362,16 @@ export function Gallery() {
                 Shuffle again
               </button>
             )}
+            {(phase === "stacked" || phase === "scattered") && (
+              <button
+                type="button"
+                className="save-btn"
+                onClick={handleSaveImage}
+                disabled={isSavingImage}
+              >
+                {isSavingImage ? "Saving…" : "Save photo"}
+              </button>
+            )}
           </div>
         </header>
       )}
@@ -288,6 +379,7 @@ export function Gallery() {
       <div
         ref={containerRef}
         className={`gallery-canvas${isDragOver ? " is-drag-over" : ""}`}
+        style={{ "--sheet-base": bgColor } as React.CSSProperties}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
