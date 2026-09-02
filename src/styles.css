@@ -2,6 +2,7 @@
   --ink: #3a332b;
   --ink-soft: rgba(58, 51, 43, 0.55);
   --sheet-base: #f4f1ea;
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
   color-scheme: light;
 }
 
@@ -80,19 +81,22 @@ body {
   font-weight: 500;
   letter-spacing: 0.01em;
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.7);
+  border: none;
   padding: 9px 18px;
   border-radius: 999px;
   cursor: pointer;
-  backdrop-filter: blur(6px);
-  transition: background 0.15s ease, transform 0.15s ease;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.03);
+  transition: background 0.25s var(--ease-smooth), transform 0.25s var(--ease-smooth),
+    box-shadow 0.25s var(--ease-smooth);
 }
 
 .upload-btn:hover,
 .shuffle-btn:hover,
 .save-btn:hover {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07), 0 0 0 1px rgba(0, 0, 0, 0.03);
   transform: translateY(-1px);
 }
 
@@ -100,6 +104,7 @@ body {
 .shuffle-btn:active,
 .save-btn:active {
   transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.03);
 }
 
 .save-btn:disabled {
@@ -109,18 +114,19 @@ body {
 }
 
 .color-swatch {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), inset 0 0 0 1px rgba(0, 0, 0, 0.05);
   cursor: pointer;
   padding: 0;
-  transition: transform 0.15s ease;
+  transition: transform 0.25s var(--ease-smooth), box-shadow 0.25s var(--ease-smooth);
 }
 
 .color-swatch:hover {
-  transform: scale(1.08);
+  transform: scale(1.1);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18), inset 0 0 0 1px rgba(0, 0, 0, 0.05);
 }
 
 .gallery-canvas {
@@ -134,46 +140,16 @@ body {
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
-  transition: box-shadow 0.2s ease;
-
-  /* A cotton sheet under soft window light: user-chosen base color (see
-     the --sheet-base override in Gallery.tsx), a directional glow from
-     the upper-left, a handful of very low-contrast "wrinkle" shadows
-     breaking up the flatness, and fine grain on top so it never reads as
-     a plain UI panel. Every tint below is derived from --sheet-base via
-     color-mix so picking a new color recolors the whole scene, not just
-     the flat fill. */
-  --sheet-shadow: color-mix(in srgb, var(--sheet-base) 45%, black 10%);
-  --sheet-highlight: color-mix(in srgb, var(--sheet-base) 15%, white 85%);
-  --sheet-edge-light: color-mix(in srgb, var(--sheet-base) 88%, white 12%);
-  --sheet-edge-dark: color-mix(in srgb, var(--sheet-base) 88%, black 12%);
+  /* Flat, not textured — the user's own chosen color (see the
+     --sheet-base override in Gallery.tsx), no gradient, no grain. The
+     photo cards already carry real shadows and rotation; a busy backdrop
+     was competing with them rather than setting them off. */
   background-color: var(--sheet-base);
-  background-image:
-    radial-gradient(ellipse 34% 22% at 22% 30%, color-mix(in srgb, var(--sheet-shadow) 32%, transparent), transparent 70%),
-    radial-gradient(ellipse 46% 16% at 68% 20%, color-mix(in srgb, var(--sheet-shadow) 22%, transparent), transparent 72%),
-    radial-gradient(ellipse 26% 30% at 78% 68%, color-mix(in srgb, var(--sheet-shadow) 26%, transparent), transparent 70%),
-    radial-gradient(ellipse 50% 20% at 35% 82%, color-mix(in srgb, var(--sheet-shadow) 26%, transparent), transparent 72%),
-    radial-gradient(ellipse 20% 26% at 8% 78%, color-mix(in srgb, var(--sheet-shadow) 22%, transparent), transparent 70%),
-    radial-gradient(ellipse 70% 55% at 18% 8%, color-mix(in srgb, var(--sheet-highlight) 90%, transparent), transparent 60%),
-    linear-gradient(135deg, var(--sheet-edge-light) 0%, var(--sheet-base) 45%, var(--sheet-edge-dark) 100%);
-  box-shadow: inset 0 0 90px color-mix(in srgb, var(--sheet-shadow) 45%, transparent);
-}
-
-.gallery-canvas::before {
-  /* fine cotton-weave grain */
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.4;
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.85 0 0 0 0 0.82 0 0 0 0 0.74 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  transition: background-color 0.3s var(--ease-smooth), box-shadow 0.3s var(--ease-smooth);
 }
 
 .gallery-canvas.is-drag-over {
-  box-shadow:
-    inset 0 0 0 2px rgba(58, 51, 43, 0.35),
-    inset 0 0 90px rgba(110, 100, 80, 0.1);
+  box-shadow: inset 0 0 0 2px var(--ink);
 }
 
 .gallery-hint {
@@ -256,17 +232,18 @@ body {
   align-items: center;
   gap: 6px;
   padding: 48px 64px;
-  border: 1.5px dashed rgba(58, 51, 43, 0.28);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.35);
+  border: none;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 0 0 1px rgba(0, 0, 0, 0.04);
   cursor: pointer;
   font-family: inherit;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.3s var(--ease-smooth), box-shadow 0.3s var(--ease-smooth);
 }
 
 .dropzone:hover {
-  background: rgba(255, 255, 255, 0.55);
-  border-color: rgba(58, 51, 43, 0.45);
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.05);
 }
 
 .dropzone__title {
@@ -323,6 +300,12 @@ body {
   justify-content: center;
   background: rgba(30, 26, 20, 0.5);
   backdrop-filter: blur(2px);
+  animation: crop-overlay-in 0.3s var(--ease-smooth);
+}
+
+@keyframes crop-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .crop-panel {
@@ -334,6 +317,18 @@ body {
   padding: 20px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
   max-width: calc(100vw - 32px);
+  animation: crop-panel-in 0.4s var(--ease-smooth);
+}
+
+@keyframes crop-panel-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .crop-panel__header {
@@ -439,7 +434,7 @@ body {
   padding: 9px 18px;
   border-radius: 999px;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition: background 0.25s var(--ease-smooth), transform 0.25s var(--ease-smooth);
 }
 
 .crop-btn--ghost {
